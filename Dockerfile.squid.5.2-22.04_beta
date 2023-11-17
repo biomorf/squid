@@ -1,0 +1,1 @@
+FROM docker.io/ubuntu/squid:5.2-22.04_beta

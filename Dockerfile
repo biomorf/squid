@@ -1,0 +1,69 @@
+##### https://dev.to/mattdark/using-docker-as-provider-for-vagrant-10me
+FROM nestybox/ubuntu-jammy-systemd-docker
+
+ARG USER=vagrant
+#ARG PROXY_VOLUME=/app
+ARG PROXY_VOLUME=/vagrant_var
+
+ENV TZ=America/Mexico_City
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+### proxy for deb files
+### TODO use vagrant-cachier instead
+#RUN echo 'Acquire::http::Proxy "http://10.0.2.2:8000";' \
+#  | tee  /etc/apt/apt.conf.d/01deb-proxy
+
+RUN apt-get update --yes
+RUN apt-get install --yes --no-install-recommends \
+  ssh \
+  sudo \
+  iproute2 \
+  inetutils-ping \
+  ;
+
+### add user vagrant
+RUN useradd --create-home -s /bin/bash $USER \
+  && echo -n "$USER:$USER" | chpasswd
+RUN usermod --append --groups sudo $USER
+RUN mkdir -p /etc/sudoers.d \
+  && echo "$USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USER \
+  && chmod 0440 /etc/sudoers.d/$USER
+
+RUN mkdir -p /home/$USER/.ssh \
+  && chmod 700 /home/$USER/.ssh
+###  This default 'insecure' key will be automatically replaced later when you initialize your virtual environment
+RUN echo "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ==" > /home/$USER/.ssh/authorized_keys
+RUN chmod 600 /home/$USER/.ssh/authorized_keys
+RUN chown -R $USER:$USER /home/$USER/.ssh
+
+RUN sed -i -e 's/Defaults.*requiretty/#&/' /etc/sudoers
+RUN sed -i -e 's/\(UsePAM \)yes/\1 no/' /etc/ssh/sshd_config
+RUN mkdir /var/run/sshd
+
+#??
+RUN apt-get -y install openssh-client
+
+#RUN apt-get install --yes docker docker.io
+# TODO test
+### make 'docker'group
+RUN groupadd --system --force docker \
+  && usermod --append --groups docker vagrant \
+  ;
+
+### Vagrant makes /vagrant_data owned by user 'admin', so you need to belong to 'admin' group to access
+RUN usermod --append --groups admin vagrant
+
+RUN usermod --append --groups vagrant proxy
+RUN mkdir -pv "$PROXY_VOLUME/var/log/squid"
+RUN chmod -R 774 $PROXY_VOLUME
+#RUN chown -R vagrant:proxy $PROXY_VOLUME
+RUN chown -R proxy: $PROXY_VOLUME
+#RUN chown -R vagrant: $PROXY_VOLUME
+
+#RUN usermod --append --groups proxy admin
+RUN usermod --append --groups proxy vagrant
+
+
+EXPOSE 22
+EXPOSE 3128
+CMD ["/usr/sbin/sshd", "-D"]

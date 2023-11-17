@@ -1,0 +1,76 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+#
+##### https://dev.to/mattdark/using-docker-as-provider-for-vagrant-10me
+
+#DOCKER_GID = 121
+DOCKER_GID = `stat -c '%g' /var/run/docker.sock | tr -d '\n'`
+
+Vagrant.configure("2") do |config|
+
+  config.vm.define "proxy.squid.host", autostart: true do |proxy|
+    proxy.vm.hostname = "proxy.squid.host"
+    proxy.vm.provider  :docker do |d|
+      d.name = "proxy.squid.host"
+      d.build_dir = "."
+      #d.dockerfile = "Dockerfile.ubuntu.dind"
+      d.dockerfile = "Dockerfile"
+      d.build_args = ["--build-arg", "DOCKER_GID=#{DOCKER_GID}"]
+      d.remains_running = true
+      d.has_ssh = true
+      ### NOTE docker provision needs systemd or service
+      #d.create_args = ["--mount", "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock"]
+      d.create_args = ["--runtime=sysbox-runc"]
+      d.ports = ["3128:3128"]
+    end
+
+    ### NOTE systemd requires some extra time to start
+    proxy.vm.boot_timeout = 600
+
+    proxy.vm.provision "docker" do |d|
+      #d.build_image "/vagrant/app",
+      #  args: ["--tag docker.io/ubuntu/squid:4.10-20.04_beta"]
+      d.images = ["docker.io/ubuntu/squid:4.10-20.04_beta"]
+      #d.pull_images "docker.io/ubuntu/squid:4.10-20.04_beta"
+      d.run "proxy.squid.container",
+        image: "docker.io/ubuntu/squid:4.10-20.04_beta",
+        #cmd: "bash -l",
+        #args: " \
+        #       -v '/vagrant_data:/vagrant' \
+        #       -v '/vagrant_data/tmp/proxy/var/log/squid:/var/log/squid' \
+        #       -v '/vagrant_data/tmp/proxy/var/spool/squid:/var/spool/squid' \
+        #       -v '/vagrant_data/tmp/proxy/squid.conf:/etc/squid/squid.conf' \
+               #-v '/app/var/log/squid:/var/log/squid' \
+        #       ",
+        args: " \
+               -e TZ=UTC -p 3128:3128 \
+               -v '/vagrant_etc/squid.conf:/etc/squid/squid.conf' \
+               -v '/vagrant_var/var/log/squid:/var/log/squid' \
+               -v '/vagrant_var/var/spool/squid:/var/spool/squid' \
+               ",
+        daemonize: true
+      #d.run "mysql", args: "-e MYSQL_ROOT_PASSWORD=insecure", image: "mysql:latest"
+    end
+    proxy.vm.synced_folder ".", "/vagrant_data", disabled: true
+  end
+
+
+    #dock.vm.network "forwarded_port", guest: 4000, host: 4000
+
+  #config.vm.synced_folder ".", "/vagrant_data"
+  config.vm.synced_folder "./vagrant_etc", "/vagrant_etc", mount_options: ["uid=13", "gid=13"]
+  #config.vm.synced_folder "./vagrant_var/", "/vagrant_var", create: true, owner: "proxy", group: "proxy", mount_options: ["uid=13", "gid=13"]
+  config.vm.synced_folder "./vagrant_var/", "/vagrant_var"
+
+
+  ### NOTE Vagrant does not support alpine's ash shell...
+  ###if "#{config.vm.provider.dockerfile}" == "Dockerfile.alpine" then
+  ###  config.ssh.shell = "sh -l"
+  ###end
+  #config.ssh.shell = "ash -l"
+
+  # Install Docker and pull an image
+  #config.vm.provision :docker do |d|
+  #  d.pull_images "alpine:3.18"
+  #end
+end
