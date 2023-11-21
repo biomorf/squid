@@ -1,3 +1,4 @@
 
 vagrant_var/
 .vagrant/
+tmp/

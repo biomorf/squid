@@ -1,0 +1,18 @@
+services:
+  squid:
+    image: docker.io/ubuntu/squid:4.10-20.04_beta
+    environment:
+      - TZ=UTC
+    ports:
+      - '3128:3128'
+    volumes:
+      - type: bind
+        source: './vagrant_etc/squid.conf'
+        target: '/etc/squid/squid.conf'
+      - type: bind
+        source: './vagrant_var/var/log/squid'
+        target: '/var/log/squid'
+      - type: bind
+        source: './vagrant_var/var/spool/squid'
+        target: '/var/spool/squid'
+

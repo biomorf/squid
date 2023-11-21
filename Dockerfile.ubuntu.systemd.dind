@@ -1,39 +1,31 @@
-#TODO fix config.ssh.shell...
 ##### https://dev.to/mattdark/using-docker-as-provider-for-vagrant-10me
-### https://stackoverflow.com/questions/73748878/how-to-run-docker-in-docker-in-an-alpine-container-as-a-non-root-user
-
-# adapted for alpine
-#FROM alpine
-#FROM docker.io/docker:18.06-dind
-FROM docker.io/docker:24.0-dind
+FROM nestybox/ubuntu-jammy-systemd-docker
 
 ARG USER=vagrant
-##ARG DOCKER_GID="$(stat -c '%g' ${DOCKER_SOCKET})"
-##ARG DOCKER_GID="$(stat -c '%g' /var/run/docker.sock)"
-#ARG DOCKER_GID
-### set argument with default value
-ARG DOCKER_GID=121
-ENV HOME /home/$USER
-
+#ARG PROXY_VOLUME=/app
+ARG PROXY_VOLUME=/vagrant_var
 
 ENV TZ=America/Mexico_City
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-USER root
+### proxy for deb files
+### TODO use vagrant-cachier instead
+#RUN echo 'Acquire::http::Proxy "http://10.0.2.2:8000";' \
+#  | tee  /etc/apt/apt.conf.d/01deb-proxy
 
-RUN apk update
-#?RUN apk add --update \
-RUN apk add \
+RUN apt-get update --yes
+RUN apt-get install --yes --no-install-recommends \
+  ssh \
   sudo \
   iproute2 \
-  openssh
+  inetutils-ping \
+  nfs-common \
+  ;
 
 ### add user vagrant
-RUN addgroup -S $USER \
-  && adduser -S $USER -G $USER -s /bin/bash \
+RUN useradd --create-home -s /bin/bash $USER \
   && echo -n "$USER:$USER" | chpasswd
-RUN addgroup -S sudo \
-  && addgroup $USER sudo
+RUN usermod --append --groups sudo $USER
 RUN mkdir -p /etc/sudoers.d \
   && echo "$USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USER \
   && chmod 0440 /etc/sudoers.d/$USER
@@ -47,26 +39,32 @@ RUN chown -R $USER:$USER /home/$USER/.ssh
 
 RUN sed -i -e 's/Defaults.*requiretty/#&/' /etc/sudoers
 RUN sed -i -e 's/\(UsePAM \)yes/\1 no/' /etc/ssh/sshd_config
-### if threre is no systemd or service
 RUN mkdir /var/run/sshd
 
-### alpine specific
-RUN ssh-keygen -A
-### Vagrant fails to replace insecure ssh key if shell is alpine default's "ash"
-RUN apk add bash
-
 #??
-RUN apk add --no-cache openssh-client
+RUN apt-get -y install openssh-client
 
-### add vagrant user to docker group
-#RUN delgroup ping
-#RUN delgroup $(grep $DOCKER_GID /etc/group | cut -d: -f1)
-#RUN delgroup docker
-#RUN groupmod --gid $DOCKER_GID docker
+#RUN apt-get install --yes docker docker.io
+# TODO test
+### make 'docker'group
+RUN groupadd --system --force docker \
+  && usermod --append --groups docker vagrant \
+  ;
 
-### make 'docker' group with GID=host docker socket gid
-RUN addgroup -S -g "$DOCKER_GID" docker \
-  && addgroup $USER docker
+### Vagrant makes /vagrant_data owned by user 'admin', so you need to belong to 'admin' group to access
+RUN usermod --append --groups admin vagrant
+
+RUN usermod --append --groups vagrant proxy
+RUN mkdir -pv "$PROXY_VOLUME/var/log/squid"
+RUN chmod -R 774 $PROXY_VOLUME
+#RUN chown -R vagrant:proxy $PROXY_VOLUME
+RUN chown -R proxy: $PROXY_VOLUME
+#RUN chown -R vagrant: $PROXY_VOLUME
+
+#RUN usermod --append --groups proxy admin
+RUN usermod --append --groups proxy vagrant
+
 
 EXPOSE 22
+EXPOSE 3128
 CMD ["/usr/sbin/sshd", "-D"]
