@@ -20,6 +20,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
     proxy.vm.provider  :docker do |d, override|
     ##### https://dev.to/mattdark/using-docker-as-provider-for-vagrant-10me
+      # TODO test on Windows !!!
       override.vm.box = nil
       d.name = "proxy.squid.host"
       d.build_dir = "."
