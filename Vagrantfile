@@ -102,6 +102,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
 
     proxy.vm.provider :libvirt do |l, override|
+      ### https://github.com/vagrant-libvirt/vagrant-libvirt
       ### https://vagrant-libvirt.github.io/vagrant-libvirt/configuration.html
       override.vm.box = VAGRANT_BOX
       l.title = "proxy.squid.host"
@@ -137,6 +138,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
 
     proxy.vm.provision "docker" do |d|
+      ### https://ubuntu.com/security/docker-images
+      ### https://hub.docker.com/r/ubuntu/squid
       #d.build_image "/vagrant_data/container",
       #  args: "--tag docker.io/ubuntu/squid:4.10-20.04_beta_custom"
       d.images = ["docker.io/ubuntu/squid:4.10-20.04_beta"]
